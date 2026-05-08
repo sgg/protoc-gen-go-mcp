@@ -102,6 +102,61 @@ func TestToolForMethod(t *testing.T) {
 	g.Expect(stdOutProps).To(HaveKey("created_at"))
 }
 
+func TestNameProviders(t *testing.T) {
+	g := NewWithT(t)
+
+	file := (&testdata.CreateItemRequest{}).ProtoReflect().Descriptor().ParentFile()
+	svc := file.Services().ByName("TestService")
+	g.Expect(svc).ToNot(BeNil())
+	method := svc.Methods().ByName("CreateItem")
+	g.Expect(method).ToNot(BeNil())
+
+	g.Expect(FullyQualifiedName(method)).To(Equal("testdata_TestService_CreateItem"))
+	g.Expect(ServiceMethodName(method)).To(Equal("TestService/CreateItem"))
+	g.Expect(MethodOnlyName(method)).To(Equal("CreateItem"))
+}
+
+func TestToolForMethod_NameProvider(t *testing.T) {
+	g := NewWithT(t)
+
+	file := (&testdata.CreateItemRequest{}).ProtoReflect().Descriptor().ParentFile()
+	svc := file.Services().ByName("TestService")
+	g.Expect(svc).ToNot(BeNil())
+	method := svc.Methods().ByName("CreateItem")
+	g.Expect(method).ToNot(BeNil())
+
+	tool := ToolForMethod(method, "test", SchemaOptions{NameProvider: ServiceMethodName})
+	g.Expect(tool.Name).To(Equal("TestService/CreateItem"))
+
+	tool = ToolForMethod(method, "test", SchemaOptions{NameProvider: MethodOnlyName})
+	g.Expect(tool.Name).To(Equal("CreateItem"))
+
+	tool = ToolForMethod(method, "test", SchemaOptions{})
+	g.Expect(tool.Name).To(Equal("testdata_TestService_CreateItem"))
+}
+
+func TestParseNameProvider(t *testing.T) {
+	g := NewWithT(t)
+
+	file := (&testdata.CreateItemRequest{}).ProtoReflect().Descriptor().ParentFile()
+	method := file.Services().ByName("TestService").Methods().ByName("CreateItem")
+
+	np, err := ParseNameProvider("fully_qualified")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(np(method)).To(Equal("testdata_TestService_CreateItem"))
+
+	np, err = ParseNameProvider("service_method")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(np(method)).To(Equal("TestService/CreateItem"))
+
+	np, err = ParseNameProvider("method_only")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(np(method)).To(Equal("CreateItem"))
+
+	_, err = ParseNameProvider("invalid")
+	g.Expect(err).To(HaveOccurred())
+}
+
 func TestNewToolResultJSON(t *testing.T) {
 	g := NewWithT(t)
 

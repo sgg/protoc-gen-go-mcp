@@ -43,6 +43,10 @@ type SchemaOptions struct {
 	// ExcludeComments disables extraction of protobuf leading comments
 	// as JSON schema "description" fields.
 	ExcludeComments bool
+
+	// NameProvider overrides how tool names are derived from method
+	// descriptors. If nil, FullyQualifiedName is used.
+	NameProvider NameProvider
 }
 
 // DiscriminatorKey is the property name of the oneof discriminator emitted in
@@ -548,6 +552,44 @@ func Base36String(b []byte) string {
 	return n.Text(36)
 }
 
+// NameProvider returns the MCP tool name for a given RPC method.
+// See FullyQualifiedName, ServiceMethodName, and MethodOnlyName for
+// canned implementations.
+type NameProvider func(method protoreflect.MethodDescriptor) string
+
+// FullyQualifiedName derives tool names from the fully qualified method
+// name with dots replaced by underscores (e.g. "pkg_Service_Method").
+func FullyQualifiedName(method protoreflect.MethodDescriptor) string {
+	return MangleHeadIfTooLong(strings.ReplaceAll(string(method.FullName()), ".", "_"), 64)
+}
+
+// ServiceMethodName derives tool names as "ServiceName/MethodName",
+// matching gRPC's hierarchical naming convention.
+func ServiceMethodName(method protoreflect.MethodDescriptor) string {
+	return MangleHeadIfTooLong(string(method.Parent().Name())+"/"+string(method.Name()), 64)
+}
+
+// MethodOnlyName derives tool names from just the method name.
+// Callers must ensure uniqueness when registering multiple services.
+func MethodOnlyName(method protoreflect.MethodDescriptor) string {
+	return MangleHeadIfTooLong(string(method.Name()), 64)
+}
+
+// ParseNameProvider returns a canned NameProvider for the given string.
+// Valid values: "fully_qualified", "service_method", "method_only".
+func ParseNameProvider(s string) (NameProvider, error) {
+	switch s {
+	case "fully_qualified":
+		return FullyQualifiedName, nil
+	case "service_method":
+		return ServiceMethodName, nil
+	case "method_only":
+		return MethodOnlyName, nil
+	default:
+		return nil, fmt.Errorf("unknown naming convention %q: must be fully_qualified, service_method, or method_only", s)
+	}
+}
+
 // MangleHeadIfTooLong truncates a tool name if it exceeds maxLen,
 // using a hash prefix + the tail of the name (most specific part).
 func MangleHeadIfTooLong(name string, maxLen int) string {
@@ -586,9 +628,14 @@ func MangleHeadIfTooLong(name string, maxLen int) string {
 
 // ToolForMethod generates the MCP tool definition for a given RPC method
 // descriptor (input and output JSON schemas plus name and description).
-// SchemaOptions controls schema generation behavior (e.g. ExcludeComments).
+// SchemaOptions controls schema generation behavior (e.g. ExcludeComments,
+// NameProvider).
 func ToolForMethod(method protoreflect.MethodDescriptor, comment string, opts SchemaOptions) runtime.Tool {
-	toolName := ToolNameForMethod(method)
+	nameProvider := opts.NameProvider
+	if nameProvider == nil {
+		nameProvider = FullyQualifiedName
+	}
+	toolName := nameProvider(method)
 	description := CleanComment(comment)
 
 	return runtime.Tool{

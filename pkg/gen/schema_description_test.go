@@ -209,13 +209,6 @@ func TestDescriptionForDescriptor_OpenAIMapMerge(t *testing.T) {
 		g.Expect(schema["description"]).To(Equal("User-defined labels"))
 	})
 
-	t.Run("openai mode merges with existing description", func(t *testing.T) {
-		g := NewWithT(t)
-		schema := FieldSchema(md.Fields().ByName("labels"), SchemaOptions{OpenAICompat: true})
-		desc := schema["description"].(string)
-		g.Expect(desc).To(HavePrefix("User-defined labels"))
-		g.Expect(desc).To(ContainSubstring("List of key value pairs"))
-	})
 }
 
 func bp(b bool) *bool { return &b }

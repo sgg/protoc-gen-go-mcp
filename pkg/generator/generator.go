@@ -35,6 +35,7 @@ const (
 // Options configures the code generator.
 type Options struct {
 	ExcludeComments bool
+	NameProvider    gen.NameProvider
 }
 
 type FileGenerator struct {
@@ -286,7 +287,10 @@ var (
 
 // messageSchema delegates to the gen package.
 func (g *FileGenerator) schemaOptions() gen.SchemaOptions {
-	return gen.SchemaOptions{ExcludeComments: g.opt.ExcludeComments}
+	return gen.SchemaOptions{
+		ExcludeComments: g.opt.ExcludeComments,
+		NameProvider:    g.opt.NameProvider,
+	}
 }
 
 func (g *FileGenerator) messageSchema(md protoreflect.MessageDescriptor) map[string]any {
@@ -367,7 +371,10 @@ func (g *FileGenerator) Generate(packageSuffix string) {
 				}
 			}
 
-			tool := gen.ToolForMethod(meth.Desc, comment, gen.SchemaOptions{ExcludeComments: g.opt.ExcludeComments})
+			tool := gen.ToolForMethod(meth.Desc, comment, gen.SchemaOptions{
+				ExcludeComments: g.opt.ExcludeComments,
+				NameProvider:    g.opt.NameProvider,
+			})
 
 			if prev, dup := seenToolNames[tool.Name]; dup {
 				g.gen.Error(fmt.Errorf("duplicate tool name %q in service %s: claimed by both %s and %s", tool.Name, svc.Desc.FullName(), prev, meth.Desc.FullName()))

@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/redpanda-data/protoc-gen-go-mcp/pkg/runtime"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -59,6 +58,11 @@ type RegisterServiceOptions struct {
 	// If nil, the tool description will be empty.
 	CommentProvider func(method protoreflect.MethodDescriptor) string
 
+	// NameProvider overrides how tool names are derived from method
+	// descriptors. If nil, FullyQualifiedName is used. See also
+	// ServiceMethodName and MethodOnlyName for canned alternatives.
+	NameProvider NameProvider
+
 	// ExcludeComments disables extraction of protobuf leading comments
 	// as JSON schema "description" fields.
 	ExcludeComments bool
@@ -75,7 +79,13 @@ func RegisterService(s runtime.MCPServer, sd protoreflect.ServiceDescriptor, han
 	if opts.NewMessage == nil {
 		opts.NewMessage = DynamicNewMessage
 	}
-	schemaOpts := SchemaOptions{ExcludeComments: opts.ExcludeComments}
+	nameProvider := opts.NameProvider
+	if nameProvider == nil {
+		nameProvider = FullyQualifiedName
+	}
+	schemaOpts := SchemaOptions{
+		ExcludeComments: opts.ExcludeComments,
+	}
 	seenNames := map[string]bool{}
 
 	for i := 0; i < sd.Methods().Len(); i++ {
@@ -91,21 +101,16 @@ func RegisterService(s runtime.MCPServer, sd protoreflect.ServiceDescriptor, han
 			comment = opts.CommentProvider(method)
 		}
 
-		// Resolve the tool name: the (mcp.v1.tool_name) option when set
-		// and valid, else the derived form. A configured name that
-		// collides with one already registered for this service falls
-		// back to the derived form, and if a configured name on an
-		// earlier method squatted on THIS method's derived name, a
-		// numeric suffix de-collides — AddTool is never called twice
-		// with the same name and nothing is silently dropped.
-		toolName := ToolNameForMethod(method)
+		// Annotation-based override takes precedence over the NameProvider.
+		toolName := nameProvider(method)
+		if name, ok := ConfiguredToolName(method); ok && ValidateToolName(name) == nil {
+			toolName = name
+		}
 		if seenNames[toolName] {
-			toolName = MangleHeadIfTooLong(
-				strings.ReplaceAll(string(method.FullName()), ".", "_"),
-				64,
-			)
-			for base, i := toolName, 2; seenNames[toolName]; i++ {
-				toolName = MangleHeadIfTooLong(fmt.Sprintf("%s_%d", base, i), 64)
+			derived := nameProvider(method)
+			toolName = derived
+			for base, n := toolName, 2; seenNames[toolName]; n++ {
+				toolName = MangleHeadIfTooLong(fmt.Sprintf("%s_%d", base, n), 64)
 			}
 		}
 		seenNames[toolName] = true

@@ -15,7 +15,10 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"os"
 
+	"github.com/redpanda-data/protoc-gen-go-mcp/pkg/gen"
 	"github.com/redpanda-data/protoc-gen-go-mcp/pkg/generator"
 	"google.golang.org/protobuf/compiler/protogen"
 )
@@ -32,16 +35,27 @@ func main() {
 		false,
 		"Exclude protobuf leading comments from generated JSON schema description fields.",
 	)
+	naming := flagSet.String(
+		"naming",
+		"fully_qualified",
+		`Tool naming convention: "fully_qualified" (pkg_Service_Method), "service_method" (Service/Method), or "method_only" (Method).`,
+	)
 
 	protogen.Options{
 		ParamFunc: flagSet.Set,
-	}.Run(func(gen *protogen.Plugin) error {
-		for _, f := range gen.Files {
+	}.Run(func(plugin *protogen.Plugin) error {
+		nameProvider, err := gen.ParseNameProvider(*naming)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "protoc-gen-go-mcp: %v\n", err)
+			return err
+		}
+		for _, f := range plugin.Files {
 			if !f.Generate {
 				continue
 			}
-			generator.NewFileGenerator(f, gen, generator.Options{
+			generator.NewFileGenerator(f, plugin, generator.Options{
 				ExcludeComments: *excludeComments,
+				NameProvider:    nameProvider,
 			}).Generate(*packageSuffix)
 		}
 		return nil
