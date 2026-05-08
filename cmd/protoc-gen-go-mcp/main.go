@@ -27,6 +27,11 @@ func main() {
 		"mcp",
 		"Generate files into a sub-package of the package containing the base .pb.go files using the given suffix. An empty suffix denotes to generate into the same package as the base pb.go files.",
 	)
+	excludeComments := flagSet.Bool(
+		"exclude_comments",
+		false,
+		"Exclude protobuf leading comments from generated JSON schema description fields.",
+	)
 
 	protogen.Options{
 		ParamFunc: flagSet.Set,
@@ -35,7 +40,9 @@ func main() {
 			if !f.Generate {
 				continue
 			}
-			generator.NewFileGenerator(f, gen).Generate(*packageSuffix)
+			generator.NewFileGenerator(f, gen, generator.Options{
+				ExcludeComments: *excludeComments,
+			}).Generate(*packageSuffix)
 		}
 		return nil
 	})

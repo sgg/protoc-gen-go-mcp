@@ -75,7 +75,7 @@ func TestToolForMethod(t *testing.T) {
 	method := svc.Methods().ByName("CreateItem")
 	g.Expect(method).ToNot(BeNil())
 
-	tool := ToolForMethod(method, "Create a new item")
+	tool := ToolForMethod(method, "Create a new item", SchemaOptions{})
 
 	g.Expect(tool.Name).To(Equal("testdata_TestService_CreateItem"))
 	g.Expect(tool.Description).To(Equal("Create a new item"))
@@ -379,7 +379,7 @@ func TestToolForMethod_LongNameMangling(t *testing.T) {
 	method := svc.Methods().ByName("DeepNesting")
 	g.Expect(method).ToNot(BeNil())
 
-	tool := ToolForMethod(method, "Test deep nesting")
+	tool := ToolForMethod(method, "Test deep nesting", SchemaOptions{})
 
 	g.Expect(tool.Name).To(Equal("testdata_EdgeCaseService_DeepNesting"))
 	g.Expect(len(tool.Name)).To(BeNumerically("<=", 64))
@@ -463,7 +463,7 @@ func TestToolForMethod_WellKnownTypesRPC(t *testing.T) {
 	svc := file.Services().ByName("TestService")
 	method := svc.Methods().ByName("ProcessWellKnownTypes")
 
-	tool := ToolForMethod(method, "Process well-known types")
+	tool := ToolForMethod(method, "Process well-known types", SchemaOptions{})
 
 	// Verify standard schema parses and has the WKT fields
 	var stdSchema map[string]any

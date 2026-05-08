@@ -39,6 +39,10 @@ type SchemaOptions struct {
 	// (though it's not strictly enforced), so the default keeps total depth
 	// manageable while still giving LLMs useful field-level detail.
 	MaxRecursionDepth int
+
+	// ExcludeComments disables extraction of protobuf leading comments
+	// as JSON schema "description" fields.
+	ExcludeComments bool
 }
 
 // DiscriminatorKey is the property name of the oneof discriminator emitted in
@@ -158,11 +162,15 @@ func messageSchema(md protoreflect.MessageDescriptor, opts SchemaOptions, seen m
 		}
 	}
 
-	return map[string]any{
+	result := map[string]any{
 		"type":       "object",
 		"properties": normalFields,
 		"required":   required,
 	}
+	if desc := descriptionForDescriptor(md, opts); desc != "" {
+		result["description"] = desc
+	}
+	return result
 }
 
 // oneofRequired reports whether a oneof carries (buf.validate.oneof).required.
@@ -223,7 +231,9 @@ func FieldSchema(fd protoreflect.FieldDescriptor, opts SchemaOptions) map[string
 // fieldSchema is the internal implementation that threads the seen set for cycle detection.
 func fieldSchema(fd protoreflect.FieldDescriptor, opts SchemaOptions, seen map[protoreflect.FullName]int) map[string]any {
 	if fd.IsMap() {
-		return mapFieldSchema(fd, opts, seen)
+		schema := mapFieldSchema(fd, opts, seen)
+		setDescription(schema, descriptionForDescriptor(fd, opts))
+		return schema
 	}
 
 	var schema map[string]any
@@ -243,11 +253,15 @@ func fieldSchema(fd protoreflect.FieldDescriptor, opts SchemaOptions, seen map[p
 	}
 
 	if fd.IsList() {
-		return map[string]any{
+		result := map[string]any{
 			"type":  "array",
 			"items": schema,
 		}
+		setDescription(result, descriptionForDescriptor(fd, opts))
+		return result
 	}
+
+	setDescription(schema, descriptionForDescriptor(fd, opts))
 	return schema
 }
 
@@ -492,6 +506,25 @@ func ExtractValidateConstraints(fd protoreflect.FieldDescriptor) map[string]any 
 	return constraints
 }
 
+func descriptionForDescriptor(d protoreflect.Descriptor, opts SchemaOptions) string {
+	if opts.ExcludeComments {
+		return ""
+	}
+	loc := d.ParentFile().SourceLocations().ByDescriptor(d)
+	return CleanComment(strings.TrimSpace(loc.LeadingComments))
+}
+
+func setDescription(schema map[string]any, desc string) {
+	if desc == "" {
+		return
+	}
+	if existing, ok := schema["description"].(string); ok {
+		schema["description"] = desc + "\n" + existing
+	} else {
+		schema["description"] = desc
+	}
+}
+
 // CleanComment removes tool-specific comment prefixes (buf:lint, @ignore-comment).
 func CleanComment(comment string) string {
 	var cleanedLines []string
@@ -553,15 +586,16 @@ func MangleHeadIfTooLong(name string, maxLen int) string {
 
 // ToolForMethod generates the MCP tool definition for a given RPC method
 // descriptor (input and output JSON schemas plus name and description).
-func ToolForMethod(method protoreflect.MethodDescriptor, comment string) runtime.Tool {
+// SchemaOptions controls schema generation behavior (e.g. ExcludeComments).
+func ToolForMethod(method protoreflect.MethodDescriptor, comment string, opts SchemaOptions) runtime.Tool {
 	toolName := ToolNameForMethod(method)
 	description := CleanComment(comment)
 
 	return runtime.Tool{
 		Name:            toolName,
 		Description:     description,
-		RawInputSchema:  marshalTopLevelSchema(method.Input(), SchemaOptions{}),
-		RawOutputSchema: marshalTopLevelSchema(method.Output(), SchemaOptions{}),
+		RawInputSchema:  marshalTopLevelSchema(method.Input(), opts),
+		RawOutputSchema: marshalTopLevelSchema(method.Output(), opts),
 	}
 }
 

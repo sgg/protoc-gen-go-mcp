@@ -58,6 +58,10 @@ type RegisterServiceOptions struct {
 	// CommentProvider optionally returns the leading comment for an RPC method.
 	// If nil, the tool description will be empty.
 	CommentProvider func(method protoreflect.MethodDescriptor) string
+
+	// ExcludeComments disables extraction of protobuf leading comments
+	// as JSON schema "description" fields.
+	ExcludeComments bool
 }
 
 // RegisterService dynamically registers all unary RPCs from a protobuf service
@@ -71,7 +75,7 @@ func RegisterService(s runtime.MCPServer, sd protoreflect.ServiceDescriptor, han
 	if opts.NewMessage == nil {
 		opts.NewMessage = DynamicNewMessage
 	}
-	schemaOpts := SchemaOptions{}
+	schemaOpts := SchemaOptions{ExcludeComments: opts.ExcludeComments}
 	seenNames := map[string]bool{}
 
 	for i := 0; i < sd.Methods().Len(); i++ {

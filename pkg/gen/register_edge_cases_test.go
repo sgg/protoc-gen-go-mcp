@@ -434,7 +434,7 @@ func TestToolForMethod_EdgeCaseService(t *testing.T) {
 		method := svc.Methods().Get(i)
 		t.Run(string(method.Name()), func(t *testing.T) {
 			g := NewWithT(t)
-			tool := ToolForMethod(method, "Test "+string(method.Name()))
+			tool := ToolForMethod(method, "Test "+string(method.Name()), SchemaOptions{})
 
 			g.Expect(len(tool.Name)).To(BeNumerically("<=", 64))
 			g.Expect(tool.Description).To(HavePrefix("Test "))

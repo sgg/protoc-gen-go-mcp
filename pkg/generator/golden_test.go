@@ -108,7 +108,7 @@ func TestGoldenGeneration(t *testing.T) {
 		if !f.Generate {
 			continue
 		}
-		NewFileGenerator(f, plugin).Generate("mcp")
+		NewFileGenerator(f, plugin, Options{}).Generate("mcp")
 	}
 
 	resp := plugin.Response()
