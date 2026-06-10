@@ -332,13 +332,38 @@ func (g *FileGenerator) Generate(packageSuffix string) {
 
 	for _, svc := range g.f.Services {
 		s := map[string]Tool{}
+		// Duplicate tool names are checked per service: one service is
+		// one Register<Service>Handler call, i.e. one MCP server's tool
+		// set. Wider scopes are not statically decidable — two different
+		// services may legitimately both name a tool "get_dashboard",
+		// they just can't be registered on the same server. Derived
+		// names are unique by construction (proto full names are), so a
+		// duplicate can only come from the (mcp.v1.tool_name) option.
+		seenToolNames := map[string]string{}
 		for _, meth := range svc.Methods {
 			if meth.Desc.IsStreamingClient() || meth.Desc.IsStreamingServer() {
 				continue
 			}
 
 			comment := string(meth.Comments.Leading)
+
+			// A configured (mcp.v1.tool_name) must be valid on every
+			// LLM provider; fail generation instead of emitting a name
+			// a provider will reject at request time.
+			if cfg, ok := gen.ConfiguredToolName(meth.Desc); ok {
+				if err := gen.ValidateToolName(cfg); err != nil {
+					g.gen.Error(fmt.Errorf("%s: (mcp.v1.tool_name): %w", meth.Desc.FullName(), err))
+					return
+				}
+			}
+
 			tool := gen.ToolForMethod(meth.Desc, comment)
+
+			if prev, dup := seenToolNames[tool.Name]; dup {
+				g.gen.Error(fmt.Errorf("duplicate tool name %q in service %s: claimed by both %s and %s", tool.Name, svc.Desc.FullName(), prev, meth.Desc.FullName()))
+				return
+			}
+			seenToolNames[tool.Name] = string(meth.Desc.FullName())
 
 			s[meth.GoName] = Tool{
 				RequestType:  g.gf.QualifiedGoIdent(meth.Input.GoIdent),

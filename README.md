@@ -162,6 +162,22 @@ sqlv1mcp.RegisterSQLServiceHandler(s, clickhouseHandler, runtime.WithNamePrefix(
 // Tools: postgres_SQLService_Query, clickhouse_SQLService_Query, ...
 ```
 
+### Tool naming
+
+By default a tool is named after the method's full proto name with dots replaced by underscores (`redpanda_mcps_sql_v1_SQLService_Query`). Names longer than 64 characters — the strictest provider limit — are truncated: a 10-character hash of the full name plus as much of the tail (the most specific part) as fits. The hash is forced to start with a letter because Gemini rejects function names that start with a digit.
+
+To publish a method under a stable, human-chosen name instead, set the `(mcp.v1.tool_name)` method option:
+
+```proto
+import "mcp/v1/annotations.proto";
+
+rpc GetEquityResearchReport(GetEquityResearchReportRequest) returns (GetEquityResearchReportResponse) {
+  option (mcp.v1.tool_name) = "get_equity_research_report";
+}
+```
+
+The value must match `^[a-z_][a-z0-9_-]{0,63}$` — lowercase snake/kebab case within every provider's function-name rules; lowercase guarantees configured names pass untouched through consumers' de-mangling heuristics (they key on the UpperCamel `Service_` segment of derived names). Code generation fails on an invalid value and on duplicate tool names within a service (one service is one MCP server registration — different services may legitimately reuse a name). The dynamic registration path (`gen.RegisterService`) applies the same option; an invalid or colliding configured name there falls back to the derived name so a tool is never silently dropped.
+
 ## Migrating from mark3labs-only (pre-v0.2)
 
 Generated code no longer imports `mark3labs/mcp-go` directly. It programs against the `runtime.MCPServer` interface, and you pick the MCP library via an adapter package.
